@@ -1,0 +1,21 @@
+{
+  "name": "pdd-consignment-server",
+  "version": "1.0.0",
+  "description": "拼多多代購網站後端 API",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}

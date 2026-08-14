@@ -1,0 +1,10 @@
+export const PORT = process.env.PORT || 3001;
+export const JWT_SECRET = process.env.JWT_SECRET || 'pdd-consignment-secret';
+export const JWT_EXPIRES_IN = '7d';
+export const DB_PATH = process.env.DB_PATH || new URL('../data/consignment.db', import.meta.url).pathname;
+export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'gary';
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123123';
+export const RATE_API_URL = process.env.RATE_API_URL || 'https://open.er-api.com/v6/latest/CNY';
+export const DEFAULT_SHIPPING_RATE = 10;
+export const DEFAULT_SERVICE_FEE_PCT = 0.1;
+export const DEFAULT_WEIGHT_KG = 1;
