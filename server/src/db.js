@@ -41,6 +41,8 @@ db.exec(`
     images TEXT,
     specs TEXT,
     weight_kg REAL NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active',
+    is_manual INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -73,6 +75,14 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+const productColumns = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
+if (!productColumns.includes('status')) {
+  db.exec("ALTER TABLE products ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+}
+if (!productColumns.includes('is_manual')) {
+  db.exec('ALTER TABLE products ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 0');
+}
 
 const adminCount = db.prepare('SELECT COUNT(*) AS count FROM admin_users').get().count;
 if (adminCount === 0) {

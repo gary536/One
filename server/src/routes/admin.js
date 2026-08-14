@@ -47,6 +47,18 @@ router.patch('/orders/:id/status', (req, res) => {
   res.json({ order: updated });
 });
 
+router.get('/products', (req, res) => {
+  const rows = db
+    .prepare("SELECT * FROM products WHERE status != 'deleted' ORDER BY fetched_at DESC, id DESC")
+    .all();
+  const products = rows.map((p) => ({
+    ...p,
+    images: JSON.parse(p.images || '[]'),
+    specs: JSON.parse(p.specs || '[]'),
+  }));
+  res.json({ products });
+});
+
 router.get('/rates', async (req, res) => {
   const settings = getSettings();
   let rate;

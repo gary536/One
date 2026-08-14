@@ -13,11 +13,23 @@ const serviceInput = ref('');
 const saveMsg = ref('');
 const saveError = ref('');
 
+const products = ref([]);
+const showForm = ref(false);
+const editingId = ref(null);
+const productMsg = ref('');
+const productError = ref('');
+const form = ref({ name: '', priceCny: '', weightKg: '1', specsText: '', imagesText: '', pddUrl: '' });
+
 const STATUS_LABEL = {
   pending: { text: '待確認', cls: 'badge-pending' },
   confirmed: { text: '已確認', cls: 'badge-confirmed' },
   shipped: { text: '已出貨', cls: 'badge-shipped' },
   completed: { text: '已完成', cls: 'badge-completed' },
+};
+
+const PRODUCT_STATUS_LABEL = {
+  active: { text: '上架中', cls: 'badge-completed' },
+  inactive: { text: '已下架', cls: 'badge-pending' },
 };
 
 const NEXT_STATUS = { pending: 'confirmed', confirmed: 'shipped', shipped: 'completed' };
@@ -26,6 +38,7 @@ onMounted(async () => {
   try {
     await loadOrders();
     await loadRates();
+    await loadProducts();
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -44,6 +57,11 @@ async function loadRates() {
   settings.value = data.settings;
   shippingInput.value = data.settings.shipping_rate_per_kg;
   serviceInput.value = (data.settings.service_fee_pct * 100).toFixed(0);
+}
+
+async function loadProducts() {
+  const data = await api('/admin/products', { token: getAdminToken() });
+  products.value = data.products;
 }
 
 const nextActions = computed(() => {
@@ -87,6 +105,101 @@ async function saveSettings() {
     saveError.value = err.message;
   }
 }
+
+function parseSpecsText(text) {
+  const specs = [];
+  for (const line of String(text || '').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [name, ...rest] = trimmed.split(':');
+    const options = String(rest.join(':')).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    if (name.trim() && options.length) specs.push({ name: name.trim(), options });
+  }
+  return specs;
+}
+
+function parseImagesText(text) {
+  return String(text || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function openCreate() {
+  editingId.value = null;
+  form.value = { name: '', priceCny: '', weightKg: '1', specsText: '', imagesText: '', pddUrl: '' };
+  productMsg.value = '';
+  productError.value = '';
+  showForm.value = true;
+}
+
+function openEdit(p) {
+  editingId.value = p.id;
+  form.value = {
+    name: p.name,
+    priceCny: p.price_cny,
+    weightKg: p.weight_kg,
+    specsText: (p.specs || []).map((s) => `${s.name}:${s.options.join(',')}`).join('\n'),
+    imagesText: (p.images || []).join('\n'),
+    pddUrl: p.pdd_url || '',
+  };
+  productMsg.value = '';
+  productError.value = '';
+  showForm.value = true;
+}
+
+function closeForm() {
+  showForm.value = false;
+  editingId.value = null;
+}
+
+async function saveProduct() {
+  productMsg.value = '';
+  productError.value = '';
+  const body = {
+    name: form.value.name,
+    priceCny: Number(form.value.priceCny),
+    weightKg: Number(form.value.weightKg),
+    specs: parseSpecsText(form.value.specsText),
+    images: parseImagesText(form.value.imagesText),
+    pddUrl: form.value.pddUrl,
+  };
+  try {
+    if (editingId.value) {
+      await api(`/products/${editingId.value}`, { method: 'PUT', token: getAdminToken(), body });
+    } else {
+      await api('/products', { method: 'POST', token: getAdminToken(), body });
+    }
+    productMsg.value = '已保存';
+    await loadProducts();
+    showForm.value = false;
+  } catch (err) {
+    productError.value = err.message;
+  }
+}
+
+async function toggleProductStatus(p) {
+  try {
+    await api(`/products/${p.id}/status`, {
+      method: 'PATCH',
+      token: getAdminToken(),
+      body: { status: p.status === 'active' ? 'inactive' : 'active' },
+    });
+    await loadProducts();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function deleteProduct(p) {
+  if (!confirm(`確定刪除產品「${p.name}」？`)) return;
+  try {
+    await api(`/products/${p.id}`, { method: 'DELETE', token: getAdminToken() });
+    await loadProducts();
+  } catch (err) {
+    alert(err.message);
+  }
+}
 </script>
 
 <template>
@@ -106,6 +219,7 @@ async function saveSettings() {
     <template v-else>
       <div style="display: flex; gap: 8px; margin-bottom: 16px">
         <button class="btn" :class="tab === 'orders' ? 'btn-primary' : 'btn-outline'" @click="tab = 'orders'">訂單管理</button>
+        <button class="btn" :class="tab === 'products' ? 'btn-primary' : 'btn-outline'" @click="tab = 'products'">產品管理</button>
         <button class="btn" :class="tab === 'rates' ? 'btn-primary' : 'btn-outline'" @click="tab = 'rates'">費率設定</button>
       </div>
 
@@ -165,6 +279,90 @@ async function saveSettings() {
               </tr>
               <tr v-if="orders.length === 0">
                 <td colspan="10" class="muted">暫無訂單</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-else-if="tab === 'products'">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
+          <span class="muted">管理產品，新增後將顯示於首頁產品目錄</span>
+          <button class="btn btn-primary" @click="openCreate">＋ 新增產品</button>
+        </div>
+        <div v-if="productMsg" class="alert alert-success">{{ productMsg }}</div>
+        <div v-if="productError" class="alert alert-error">{{ productError }}</div>
+
+        <div v-if="showForm" class="card" style="margin-bottom: 16px">
+          <h2 style="font-size: 16px; margin-bottom: 16px">{{ editingId ? '編輯產品' : '新增產品' }}</h2>
+          <div class="form-group">
+            <label for="p-name">產品名稱 *</label>
+            <input id="p-name" v-model="form.name" class="form-input" />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+            <div class="form-group">
+              <label for="p-price">人民幣價格 *</label>
+              <input id="p-price" v-model="form.priceCny" class="form-input" type="number" step="0.01" min="0" />
+            </div>
+            <div class="form-group">
+              <label for="p-weight">重量（kg）</label>
+              <input id="p-weight" v-model="form.weightKg" class="form-input" type="number" step="0.1" min="0.1" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="p-specs">規格（每行一組，格式：名稱:選項1,選項2）</label>
+            <textarea id="p-specs" v-model="form.specsText" class="form-input" placeholder="顏色:黑色,白色&#10;版本:標準版,Pro版"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="p-images">圖片網址（每行一個）</label>
+            <textarea id="p-images" v-model="form.imagesText" class="form-input" placeholder="https://example.com/1.jpg"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="p-url">拼多多鏈結（可選）</label>
+            <input id="p-url" v-model="form.pddUrl" class="form-input" placeholder="https://mobile.yangkeduo.com/goods.html?goods_id=..." />
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button class="btn btn-primary" @click="saveProduct">保存</button>
+            <button class="btn btn-outline" @click="closeForm">取消</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding: 16px; overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>圖片</th>
+                <th>產品名稱</th>
+                <th>人民幣價格</th>
+                <th>重量</th>
+                <th>來源</th>
+                <th>狀態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in products" :key="p.id">
+                <td>
+                  <img v-if="p.images.length" :src="p.images[0]" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px" alt="" />
+                  <span v-else class="muted">無</span>
+                </td>
+                <td>{{ p.name }}</td>
+                <td>¥{{ p.price_cny.toFixed(2) }}</td>
+                <td>{{ p.weight_kg }}kg</td>
+                <td>{{ p.is_manual ? '手動上架' : '拼多多抓取' }}</td>
+                <td>
+                  <span class="badge" :class="PRODUCT_STATUS_LABEL[p.status]?.cls">{{ PRODUCT_STATUS_LABEL[p.status]?.text }}</span>
+                </td>
+                <td style="white-space: nowrap">
+                  <button class="btn btn-outline" style="padding: 5px 10px; font-size: 13px; margin-right: 4px" @click="openEdit(p)">編輯</button>
+                  <button class="btn btn-outline" style="padding: 5px 10px; font-size: 13px; margin-right: 4px" @click="toggleProductStatus(p)">
+                    {{ p.status === 'active' ? '下架' : '上架' }}
+                  </button>
+                  <button class="btn btn-outline" style="padding: 5px 10px; font-size: 13px; color: #c0392b" @click="deleteProduct(p)">刪除</button>
+                </td>
+              </tr>
+              <tr v-if="products.length === 0">
+                <td colspan="7" class="muted">暫無產品</td>
               </tr>
             </tbody>
           </table>

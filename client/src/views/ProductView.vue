@@ -32,8 +32,8 @@ onMounted(async () => {
   try {
     const data = await api(`/products/${id}`);
     product.value = data.product;
-    images.value = JSON.parse(data.product.images || '[]');
-    specs.value = JSON.parse(data.product.specs || '[]');
+    images.value = data.product.images || [];
+    specs.value = data.product.specs || [];
     quote.value = data.quote;
     rate.value = data.rate;
   } catch (err) {
