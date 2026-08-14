@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { parseGoodsId, extractRawData, parseProductData, extractJsonObject } from '../src/services/pdd.js';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  parseGoodsId,
+  extractRawData,
+  parseProductData,
+  extractJsonObject,
+  isPddDomain,
+  resolveGoodsId,
+} from '../src/services/pdd.js';
 
 describe('parseGoodsId', () => {
   it('從 mobile.yangkeduo.com 鏈結提取 goods_id', () => {
@@ -10,10 +17,47 @@ describe('parseGoodsId', () => {
     expect(parseGoodsId('https://www.yangkeduo.com/goods2.html?goods_id=987654321&refer_share_uin=abc')).toBe('987654321');
   });
 
+  it('從分享鏈結提取 goods_id', () => {
+    const url =
+      'https://mobile.yangkeduo.com/goods1.html?refer_share_uin=ABC&refer_share_id=xyz&page_from=31&goods_id=555666777888&_oak_share_detail_id=123';
+    expect(parseGoodsId(url)).toBe('555666777888');
+  });
+
   it('無效鏈結返回 null', () => {
     expect(parseGoodsId('https://example.com/foo')).toBeNull();
     expect(parseGoodsId('')).toBeNull();
     expect(parseGoodsId(null)).toBeNull();
+  });
+});
+
+describe('isPddDomain', () => {
+  it('識別拼多多相關域名', () => {
+    expect(isPddDomain('https://p.pinduoduo.com/abc')).toBe(true);
+    expect(isPddDomain('https://mobile.yangkeduo.com/goods.html')).toBe(true);
+    expect(isPddDomain('https://example.com')).toBe(false);
+  });
+});
+
+describe('resolveGoodsId', () => {
+  it('短鏈結透過重定向解析 goods_id', async () => {
+    global.fetch = vi.fn(async () => ({
+      url: 'https://mobile.yangkeduo.com/goods.html?goods_id=888999000111',
+      arrayBuffer: async () => new ArrayBuffer(0),
+    }));
+    const { goodsId, resolvedUrl } = await resolveGoodsId('https://p.pinduoduo.com/abc123');
+    expect(goodsId).toBe('888999000111');
+    expect(resolvedUrl).toContain('goods_id=888999000111');
+  });
+
+  it('無 goods_id 的非拼多多鏈結返回 null', async () => {
+    const { goodsId } = await resolveGoodsId('https://example.com/foo');
+    expect(goodsId).toBeNull();
+  });
+
+  it('直接含 goods_id 的鏈結不需重定向', async () => {
+    const { goodsId, resolvedUrl } = await resolveGoodsId('https://mobile.yangkeduo.com/goods.html?goods_id=111222333');
+    expect(goodsId).toBe('111222333');
+    expect(resolvedUrl).toContain('goods_id=111222333');
   });
 });
 

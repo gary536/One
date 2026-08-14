@@ -6,14 +6,45 @@ const USER_AGENT =
 export function parseGoodsId(url) {
   if (!url || typeof url !== 'string') return null;
   const trimmed = url.trim();
-  const qs = trimmed.split('?')[1] || '';
+  const qs = trimmed.split(/[?#]/)[1] || '';
   const params = new URLSearchParams(qs);
   const id = params.get('goods_id') || params.get('goodsId') || params.get('goodsid');
   if (id && /^\d+$/.test(id)) return id;
-  const pathMatch = trimmed.match(/(?:goods|goods2)\.html\/(\d+)/);
+  const pathMatch = trimmed.match(/(?:goods|goods2)\.html\/(\d{6,})/);
   if (pathMatch) return pathMatch[1];
-  const rawMatch = trimmed.match(/goods_id=(\d+)/);
+  const rawMatch = trimmed.match(/goods_?id[=:](\d{6,})/i);
   return rawMatch ? rawMatch[1] : null;
+}
+
+export function isPddDomain(url) {
+  if (!url || typeof url !== 'string') return false;
+  return /pinduoduo\.com|yangkeduo\.com|pdd\.com/i.test(url);
+}
+
+export async function resolveRedirect(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,*/*;q=0.8' },
+    });
+    await res.arrayBuffer();
+    return res.url || url;
+  } catch {
+    return url;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function resolveGoodsId(url) {
+  const direct = parseGoodsId(url);
+  if (direct) return { goodsId: direct, resolvedUrl: url };
+  if (!isPddDomain(url)) return { goodsId: null, resolvedUrl: url };
+  const finalUrl = await resolveRedirect(url);
+  return { goodsId: parseGoodsId(finalUrl), resolvedUrl: finalUrl };
 }
 
 export function extractJsonObject(text, startIndex) {

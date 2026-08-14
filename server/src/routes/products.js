@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db, getSettings } from '../db.js';
-import { parseGoodsId, fetchProduct } from '../services/pdd.js';
+import { fetchProduct, resolveGoodsId } from '../services/pdd.js';
 import { getExchangeRate } from '../services/rate.js';
 import { calculateTotalHkd } from '../services/pricing.js';
 
@@ -20,8 +20,13 @@ function buildQuote(product, rate, settings) {
 router.post('/fetch', async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: '請貼上拼多多商品鏈結' });
-  const goodsId = parseGoodsId(url);
-  if (!goodsId) return res.status(400).json({ error: '無法解析商品鏈結，請確認是有效的拼多多商品網址' });
+  const { goodsId, resolvedUrl } = await resolveGoodsId(url);
+  if (!goodsId) {
+    return res.status(400).json({
+      error:
+        '無法解析商品鏈結。請貼上拼多多商品網址，格式例如：https://mobile.yangkeduo.com/goods.html?goods_id=1234567890',
+    });
+  }
 
   const cached = db.prepare('SELECT * FROM products WHERE goods_id = ?').get(goodsId);
   if (cached) {
@@ -35,7 +40,7 @@ router.post('/fetch', async (req, res) => {
   }
 
   try {
-    const product = await fetchProduct(url);
+    const product = await fetchProduct(resolvedUrl);
     const info = db
       .prepare(
         `INSERT INTO products (goods_id, pdd_url, name, price_cny, images, specs, weight_kg)
