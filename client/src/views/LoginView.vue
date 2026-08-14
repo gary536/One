@@ -1,16 +1,18 @@
 <script setup>
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, setToken } from '../api/client.js';
+import { api, setToken, formatDateTime } from '../api/client.js';
 
 const router = useRouter();
 const route = useRoute();
 const form = ref({ username: '', password: '' });
 const error = ref('');
+const success = ref('');
 const loading = ref(false);
 
 async function submit() {
   error.value = '';
+  success.value = '';
   if (!form.value.username || !form.value.password) {
     error.value = '請輸入帳號與密碼';
     return;
@@ -19,7 +21,9 @@ async function submit() {
   try {
     const data = await api('/auth/login', { method: 'POST', body: form.value });
     setToken(data.token);
-    router.push(route.query.redirect || '/');
+    const last = formatDateTime(data.previousLoginAt);
+    success.value = `登入成功！${last ? `上次登錄：${last}` : '這是您首次登入'}`;
+    setTimeout(() => router.push(route.query.redirect || '/'), 1500);
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -33,6 +37,7 @@ async function submit() {
     <h1>客戶登入</h1>
     <p class="muted" style="margin: 6px 0 20px">登入後可查看訂單與下單</p>
     <div v-if="error" class="alert alert-error">{{ error }}</div>
+    <div v-if="success" class="alert alert-success">{{ success }}</div>
     <div class="form-group">
       <label for="username">帳號</label>
       <input id="username" v-model="form.username" class="form-input" @keyup.enter="submit" />

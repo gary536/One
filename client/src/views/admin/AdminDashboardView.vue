@@ -1,10 +1,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { api, formatHkd, getAdminToken } from '../../api/client.js';
+import { api, formatHkd, getAdminToken, formatDateTime } from '../../api/client.js';
 
 const tab = ref('orders');
 const loading = ref(true);
 const error = ref('');
+const lastAdminLogin = ref(localStorage.getItem('pdd_admin_last_login') || '');
 const orders = ref([]);
 const rateInfo = ref(null);
 const settings = ref({});
@@ -207,6 +208,9 @@ async function deleteProduct(p) {
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
       <h1>管理後台</h1>
       <div class="muted">
+        <template v-if="lastAdminLogin">
+          上次登錄：{{ formatDateTime(lastAdminLogin) }}　
+        </template>
         當前匯率：
         <template v-if="rateInfo?.rate">1 CNY = {{ rateInfo.rate }} HKD</template>
         <template v-else>無法取得</template>

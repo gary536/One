@@ -54,3 +54,10 @@ export function formatHkd(value) {
   if (value == null || Number.isNaN(Number(value))) return '-';
   return `HK$${Number(value).toFixed(2)}`;
 }
+
+export function formatDateTime(value) {
+  if (!value) return null;
+  const d = new Date(`${String(value).replace(' ', 'T')}Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' });
+}

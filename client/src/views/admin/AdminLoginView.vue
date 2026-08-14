@@ -18,6 +18,11 @@ async function submit() {
   try {
     const data = await api('/auth/admin-login', { method: 'POST', body: form.value });
     setAdminToken(data.token);
+    if (data.previousLoginAt) {
+      localStorage.setItem('pdd_admin_last_login', data.previousLoginAt);
+    } else {
+      localStorage.removeItem('pdd_admin_last_login');
+    }
     router.push('/admin');
   } catch (err) {
     error.value = err.message;

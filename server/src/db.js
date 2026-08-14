@@ -23,13 +23,15 @@ db.exec(`
     contact_name TEXT NOT NULL,
     phone TEXT NOT NULL,
     address TEXT NOT NULL,
+    last_login_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   CREATE TABLE IF NOT EXISTS admin_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
+    last_login_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS products (
@@ -82,6 +84,16 @@ if (!productColumns.includes('status')) {
 }
 if (!productColumns.includes('is_manual')) {
   db.exec('ALTER TABLE products ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 0');
+}
+
+const userColumns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+if (!userColumns.includes('last_login_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN last_login_at TEXT');
+}
+
+const adminColumns = db.prepare('PRAGMA table_info(admin_users)').all().map((c) => c.name);
+if (!adminColumns.includes('last_login_at')) {
+  db.exec('ALTER TABLE admin_users ADD COLUMN last_login_at TEXT');
 }
 
 const adminCount = db.prepare('SELECT COUNT(*) AS count FROM admin_users').get().count;

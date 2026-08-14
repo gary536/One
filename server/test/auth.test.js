@@ -72,6 +72,25 @@ describe('客戶登入', () => {
   });
 });
 
+describe('上次登錄記錄', () => {
+  it('首次登入 previousLoginAt 為空，之後登入返回上次登錄時間', async () => {
+    await post('/api/auth/register', {
+      username: 'loginlog',
+      password: 'secret123',
+      contactName: '記錄員',
+      phone: '91111111',
+      address: '香港測試地址',
+    });
+    const first = await post('/api/auth/login', { username: 'loginlog', password: 'secret123' });
+    const firstData = await first.json();
+    expect(firstData.previousLoginAt).toBeNull();
+
+    const second = await post('/api/auth/login', { username: 'loginlog', password: 'secret123' });
+    const secondData = await second.json();
+    expect(secondData.previousLoginAt).toBeTruthy();
+  });
+});
+
 describe('管理員登入', () => {
   it('預設管理員 gary/123123 登入成功', async () => {
     const res = await post('/api/auth/admin-login', { username: 'gary', password: '123123' });

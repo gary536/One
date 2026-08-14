@@ -37,7 +37,15 @@ router.post('/login', (req, res) => {
   if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
     return res.status(401).json({ error: '帳號或密碼錯誤' });
   }
-  res.json({ token: signCustomerToken(user), user: { id: user.id, username: user.username, contactName: user.contact_name } });
+  const lastLoginAt = user.last_login_at || null;
+  db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(user.id);
+  const updated = db.prepare('SELECT last_login_at FROM users WHERE id = ?').get(user.id);
+  res.json({
+    token: signCustomerToken(user),
+    lastLoginAt: updated.last_login_at,
+    previousLoginAt: lastLoginAt,
+    user: { id: user.id, username: user.username, contactName: user.contact_name },
+  });
 });
 
 router.post('/admin-login', (req, res) => {
@@ -47,7 +55,15 @@ router.post('/admin-login', (req, res) => {
   if (!admin || !bcrypt.compareSync(String(password), admin.password_hash)) {
     return res.status(401).json({ error: '管理員帳號或密碼錯誤' });
   }
-  res.json({ token: signAdminToken(admin), admin: { username: admin.username } });
+  const lastLoginAt = admin.last_login_at || null;
+  db.prepare("UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?").run(admin.id);
+  const updated = db.prepare('SELECT last_login_at FROM admin_users WHERE id = ?').get(admin.id);
+  res.json({
+    token: signAdminToken(admin),
+    lastLoginAt: updated.last_login_at,
+    previousLoginAt: lastLoginAt,
+    admin: { username: admin.username },
+  });
 });
 
 export default router;
