@@ -203,7 +203,7 @@ export async function fetchProductPage(url) {
       throw new Error('拼多多觸發風控驗證，請稍後重試');
     }
     if (html.includes('needLogin') && /"needLogin":\s*true/.test(html)) {
-      throw new Error('此商品需要登入拼多多才能查看，請換其他商品鏈結');
+      throw new Error('拼多多要求登入才能查看此商品（可能因當前網絡觸發風控），請稍後重試或更換網絡環境');
     }
     return { html, finalUrl };
   } finally {
