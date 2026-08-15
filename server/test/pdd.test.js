@@ -6,6 +6,9 @@ import {
   extractJsonObject,
   isPddDomain,
   resolveGoodsId,
+  buildAltGoodsUrls,
+  fetchProduct,
+  fetchProductPage,
 } from '../src/services/pdd.js';
 
 describe('parseGoodsId', () => {
@@ -145,5 +148,49 @@ describe('parseProductData', () => {
 
   it('缺少商品資料時拋錯', () => {
     expect(() => parseProductData({})).toThrow();
+  });
+});
+
+describe('buildAltGoodsUrls', () => {
+  it('依 goods_id 產生備用入口並排除原 URL', () => {
+    const urls = buildAltGoodsUrls('https://mobile.yangkeduo.com/goods.html?goods_id=111222333', '111222333');
+    expect(urls.length).toBeGreaterThan(2);
+    expect(urls.every((u) => u.includes('goods_id=111222333'))).toBe(true);
+    expect(urls).not.toContain('https://mobile.yangkeduo.com/goods.html?goods_id=111222333');
+  });
+
+  it('無 goods_id 時返回空陣列', () => {
+    expect(buildAltGoodsUrls('https://example.com/foo', null)).toEqual([]);
+  });
+});
+
+describe('fetchProduct 多入口重試', () => {
+  const needLoginHtml = () =>
+    `<html><head></head><body>${'x'.repeat(3000)}<script>window.__INITIAL_STATE__ = {"needLogin":true};</script></body></html>`;
+
+  it('主 URL 風控失敗後自動嘗試備用入口成功', async () => {
+    const okHtml = `<html><body>${'x'.repeat(2000)}<script>window.rawData = {"goods":{"goodsID":"999000111222","goodsName":"重試成功商品","minGroupPrice":2990}};</script></body></html>`;
+    const calls = [];
+    global.fetch = vi.fn(async (url) => {
+      calls.push(url);
+      if (url.includes('goods1.html')) {
+        return { ok: true, status: 200, url, text: async () => okHtml };
+      }
+      return { ok: true, status: 200, url, text: async () => needLoginHtml() };
+    });
+    const p = await fetchProduct('https://mobile.yangkeduo.com/goods.html?goods_id=999000111222');
+    expect(p.name).toBe('重試成功商品');
+    expect(p.goodsId).toBe('999000111222');
+    expect(calls.some((u) => u.includes('goods1.html'))).toBe(true);
+  });
+
+  it('全部入口失敗時拋出最後錯誤', async () => {
+    global.fetch = vi.fn(async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      text: async () => needLoginHtml(),
+    }));
+    await expect(fetchProduct('https://mobile.yangkeduo.com/goods.html?goods_id=999000111222')).rejects.toThrow('拼多多要求登入');
   });
 });

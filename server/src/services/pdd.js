@@ -1,7 +1,14 @@
 import { DEFAULT_WEIGHT_KG } from '../config.js';
 
-const USER_AGENT =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const USER_AGENTS = [
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UD1A.230803.041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.71 Mobile Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+];
+
+const MAX_UA_TRIES = 3;
+const FETCH_TIMEOUT_MS = 10000;
 
 export function parseGoodsId(url) {
   if (!url || typeof url !== 'string') return null;
@@ -28,7 +35,7 @@ export async function resolveRedirect(url) {
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: 'follow',
-      headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,*/*;q=0.8' },
+      headers: { 'User-Agent': USER_AGENTS[0], Accept: 'text/html,*/*;q=0.8' },
     });
     await res.arrayBuffer();
     return res.url || url;
@@ -183,14 +190,26 @@ function isRiskControlPage(html) {
   return false;
 }
 
-export async function fetchProductPage(url) {
+export function buildAltGoodsUrls(url, goodsId) {
+  if (!goodsId) return [];
+  const candidates = [
+    `https://mobile.yangkeduo.com/goods1.html?goods_id=${goodsId}`,
+    `https://mobile.yangkeduo.com/goods.html?goods_id=${goodsId}`,
+    `https://mobile.yangkeduo.com/goods2.html?goods_id=${goodsId}`,
+    `https://m.yangkeduo.com/goods.html?goods_id=${goodsId}`,
+    `https://www.pinduoduo.com/goods.html?goods_id=${goodsId}`,
+  ];
+  return [...new Set(candidates.filter((u) => u !== url))];
+}
+
+async function fetchWithUa(url, ua) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': USER_AGENT,
+        'User-Agent': ua,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
         'Cache-Control': 'no-cache',
@@ -211,12 +230,43 @@ export async function fetchProductPage(url) {
   }
 }
 
+export async function fetchProductPage(url) {
+  let lastError;
+  for (const ua of USER_AGENTS.slice(0, MAX_UA_TRIES)) {
+    try {
+      return await fetchWithUa(url, ua);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchProduct(url) {
+  let lastError;
+  try {
+    return await fetchProductFromUrl(url);
+  } catch (err) {
+    lastError = err;
+  }
+  const goodsId = parseGoodsId(url);
+  const altUrls = buildAltGoodsUrls(url, goodsId);
+  for (const altUrl of altUrls) {
+    try {
+      return await fetchProductFromUrl(altUrl);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+async function fetchProductFromUrl(url) {
   const { html, finalUrl } = await fetchProductPage(url);
   const rawData = extractRawData(html);
   if (!rawData) throw new Error('無法解析商品頁資料');
   const product = parseProductData(rawData);
   const resolvedUrl = finalUrl || url;
-  const goodsId = product.goodsId || parseGoodsId(resolvedUrl);
-  return { ...product, goodsId, pddUrl: resolvedUrl };
+  const gid = product.goodsId || parseGoodsId(resolvedUrl);
+  return { ...product, goodsId: gid, pddUrl: resolvedUrl };
 }
